@@ -4,6 +4,82 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // Auth UI elements
+  const userIconBtn = document.getElementById("user-icon-btn");
+  const loginModal = document.getElementById("login-modal");
+  const loginForm = document.getElementById("login-form");
+  const cancelLoginBtn = document.getElementById("cancel-login-btn");
+  const loggedInLabel = document.getElementById("logged-in-label");
+  const logoutBtn = document.getElementById("logout-btn");
+  const loginError = document.getElementById("login-error");
+
+  let isTeacherLoggedIn = false;
+
+  // --- Auth state ---
+  async function refreshAuthState() {
+    const res = await fetch("/auth/me");
+    const data = await res.json();
+    isTeacherLoggedIn = data.logged_in;
+
+    if (isTeacherLoggedIn) {
+      userIconBtn.classList.add("hidden");
+      loggedInLabel.textContent = `👤 ${data.username}`;
+      loggedInLabel.classList.remove("hidden");
+      logoutBtn.classList.remove("hidden");
+      signupForm.closest("section").classList.remove("hidden");
+    } else {
+      userIconBtn.classList.remove("hidden");
+      loggedInLabel.classList.add("hidden");
+      logoutBtn.classList.add("hidden");
+      signupForm.closest("section").classList.add("hidden");
+    }
+
+    // Re-render to show/hide delete buttons
+    fetchActivities();
+  }
+
+  // Show login modal
+  userIconBtn.addEventListener("click", () => {
+    loginModal.classList.remove("hidden");
+    document.getElementById("login-username").focus();
+  });
+
+  // Hide login modal
+  cancelLoginBtn.addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+    loginForm.reset();
+    loginError.classList.add("hidden");
+  });
+
+  // Submit login
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.getElementById("login-username").value;
+    const password = document.getElementById("login-password").value;
+
+    const res = await fetch(
+      `/auth/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+      { method: "POST", redirect: "manual" }
+    );
+
+    if (res.ok || res.status === 0 || res.type === "opaqueredirect") {
+      loginModal.classList.add("hidden");
+      loginForm.reset();
+      loginError.classList.add("hidden");
+      await refreshAuthState();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      loginError.textContent = data.detail || "Invalid username or password";
+      loginError.classList.remove("hidden");
+    }
+  });
+
+  // Logout
+  logoutBtn.addEventListener("click", async () => {
+    await fetch("/auth/logout", { method: "POST", redirect: "manual" });
+    await refreshAuthState();
+  });
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -30,7 +106,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${
+                        isTeacherLoggedIn
+                          ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>`
+                          : ""
+                      }</li>`
                   )
                   .join("")}
               </ul>
@@ -156,5 +236,5 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
-  fetchActivities();
+  refreshAuthState();
 });
